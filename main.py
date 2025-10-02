@@ -34,29 +34,6 @@ from langchain_openai import OpenAIEmbeddings
 
 load_dotenv()
 
-# class State(TypedDict):
-#     """LangGraph state type for message passing.
-
-#     The `messages` key holds a list of chat messages. The `add_messages` annotation
-#     appends new entries to the list instead of replacing them.
-#     """
-
-#     messages: Annotated[list, add_messages]
-
-# def chatbot(state: State):
-#     """Simple chatbot node that invokes the configured LLM."""
-#     return {"messages": [llm.invoke(state["messages"])]}
-
-# llm = None
-# graph = None
-
-# def stream_graph_updates(user_input: str):
-#     """Utility to stream graph events for a single user input."""
-#     for event in graph.stream({"messages": [{"role": "user", "content": user_input}]}):
-#         for value in event.values():
-#             print("Assistant:", value["messages"][-1].content)
-
-
 def _introspect_schema(conn: sqlite3.Connection) -> Tuple[str, List[str]]:
     """Return a printable schema summary and list of table names for a SQLite DB."""
     cur = conn.cursor()
@@ -121,7 +98,7 @@ def nl2sql_tool(question: str, db_path: str = str(Path("data") / "legal.db"), li
     - db_path: Path to the SQLite database file.
     - limit: Row cap for the results preview and a default LIMIT if absent.
     """
-    local_llm = init_chat_model("openai:gpt-4.1")
+    local_llm = init_chat_model("openai:gpt-4o-mini")
     conn = sqlite3.connect(db_path)
     try:
         schema_text, _ = _introspect_schema(conn)
@@ -208,7 +185,13 @@ def rag_search_tool(
         persist_directory=persist_dir,
     )
 
-    # Build Chroma-compatible filter. Use a top-level $and when multiple fields are present.
+    # Build Chroma-compatible filter for metadata fields.
+    # Notes for future readers:
+    # - Chroma expects each field's operator expression to contain exactly one operator.
+    #   Therefore, for a range we MUST split into two separate clauses:
+    #     {"created_utc": {"$gte": ...}} and {"created_utc": {"$lte": ...}}
+    # - When multiple field conditions are present, they must be wrapped under a
+    #   single top-level logical operator. We use "$and" here to intersect filters.
     clauses: List[dict] = []
     # Split range into two separate operator expressions to satisfy Chroma's filter grammar
     if created_utc_gte is not None:
@@ -221,13 +204,20 @@ def rag_search_tool(
         else:
             clauses.append({"text_label": text_label})
 
+    # Collapse the clauses into the final "where" filter Chroma expects.
+    # - 0 clauses → no filter (None)
+    # - 1 clause  → pass the single dict directly
+    # - >1 clauses → wrap with top-level "$and"
     where = None
     if len(clauses) == 1:
         where = clauses[0]
     elif len(clauses) > 1:
         where = {"$and": clauses}
 
-    # Perform semantic search with optional metadata filter
+    # Perform semantic search with optional metadata filter.
+    # Prefer the API that returns (Document, relevance_score) pairs. If that
+    # method is not available in the environment, fall back to plain similarity
+    # search and synthesize a (doc, None) tuple for a consistent downstream shape.
     try:
         results = vectorstore.similarity_search_with_relevance_scores(
             query, k=top_k, filter=where
@@ -237,6 +227,9 @@ def rag_search_tool(
         docs = vectorstore.similarity_search(query, k=top_k, filter=where)
         results = [(d, None) for d in docs]
 
+    # Format a compact, readable preview:
+    # - Header shows k, applied filters, and collection
+    # - Each entry prints score (if available), key metadata, and a truncated snippet
     lines: List[str] = []
     lines.append(
         f"RESULTS (k={top_k}, filters={where if where is not None else {}}, collection='{collection}')"
@@ -246,6 +239,7 @@ def rag_search_tool(
         created = meta.get("created_utc")
         label = meta.get("text_label")
         snippet = (doc.page_content or "").strip()
+        # Truncate long content to keep terminal output skimmable
         if len(snippet) > 600:
             snippet = snippet[:600] + "..."
         lines.append(
