@@ -22,6 +22,25 @@ pip install -e .
 OPENAI_API_KEY=sk-...
 ```
 
+Alternatively, copy from a template:
+
+```bash
+cp .env.example .env
+```
+
+Then edit `.env` and set required/optional variables.
+
+Suggested `.env.example`:
+
+```bash
+# Required
+# OpenAI API key for embeddings and chat models
+OPENAI_API_KEY=
+
+# Optional: LangSmith observability (leave unset if not using)
+#LANGSMITH_API_KEY=
+```
+
 ## Build Vector Store
 
 Create a Chroma vector database from the provided JSONL dataset:
