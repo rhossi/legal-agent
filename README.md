@@ -95,6 +95,88 @@ Examples of suitable questions:
 - "List top 10 titles about landlord disputes in 2021."
 - "Counts by text_label for posts containing 'breach'."
 
+## Serve the agent with LangGraph CLI
+
+The project includes a `langgraph.json` mapping the graph name `agent` to `main.py:agent`. You can use the LangGraph CLI to run a local dev server.
+
+### Install the CLI
+
+- Using this project's dependencies (recommended):
+
+```bash
+uv sync  # or pip install -e .
+```
+
+The CLI (`langgraph`) is installed from `pyproject.toml`.
+
+- Or install globally via pipx:
+
+```bash
+pipx install langgraph-cli
+```
+
+### Run the dev server
+
+From the project root (where `langgraph.json` lives):
+
+```bash
+langgraph dev
+```
+
+Optional flags:
+
+```bash
+langgraph dev --host 0.0.0.0 --port 8123
+```
+
+Notes:
+
+- The CLI will read environment variables from `.env` (as configured in `langgraph.json`). Ensure `OPENAI_API_KEY` is set.
+- The dev server provides a local UI and HTTP API for the `agent` graph defined in `main.py`.
+- Use the on-screen playground to chat with the agent, or see LangGraph docs for API endpoints.
+
+## Optional: Run Agent Chat UI (LangChain)
+
+Use the community Agent Chat UI to interact with your locally served graph.
+
+Prerequisites:
+
+- Node.js 18+ and npm (or pnpm)
+- A running dev server from the previous step (`langgraph dev`)
+
+Steps:
+
+1. Start the LangGraph dev server in this repo’s root.
+
+```bash
+langgraph dev --port 8123
+```
+
+1. In a separate terminal, clone and install the Agent Chat UI.
+
+```bash
+git clone https://github.com/langchain-ai/agent-chat-ui
+cd agent-chat-ui
+npm install  # or: pnpm install
+```
+
+1. Create a `.env.local` file in the UI project and set the backend URL and graph id.
+
+```bash
+echo "NEXT_PUBLIC_LANGGRAPH_BASE_URL=http://localhost:8123" >> .env.local
+echo "NEXT_PUBLIC_GRAPH_ID=agent" >> .env.local
+# optional branding
+echo "NEXT_PUBLIC_PROJECT_TITLE=Legal Agent" >> .env.local
+```
+
+1. Run the UI.
+
+```bash
+npm run dev  # or: pnpm dev
+```
+
+Open `http://localhost:3000` and chat with the `agent` graph. If you used a different port for `langgraph dev`, update `NEXT_PUBLIC_LANGGRAPH_BASE_URL` accordingly.
+
 ## Dataset
 
 The project expects a JSONL file at `datasets/legal-dataset.jsonl` with fields:
